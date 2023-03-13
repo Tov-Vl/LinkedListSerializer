@@ -37,7 +37,7 @@ namespace SerializerTests.Helpers
                 serializer.Append(indent + '{' + newLine);
                 serializer.Append($"{indent}{indent}\"{NodeDto.IndexName}\":{whiteSpace}{nodeDto.Index},{newLine}");
                 serializer.Append($"{indent}{indent}\"{NodeDto.RandomIndexName}\":{whiteSpace}{(nodeDto.RandomIndex.HasValue ? nodeDto.RandomIndex : "null")},{newLine}");
-                serializer.Append($"{indent}{indent}\"{NodeDto.DataName}\":{whiteSpace}\"{(nodeDto.Data != null ? nodeDto.Data : "null")}\"{newLine}");
+                serializer.Append($"{indent}{indent}\"{NodeDto.DataName}\":{whiteSpace}\"{nodeDto.Data ?? "null"}\"{newLine}");
                 serializer.Append(indent + '}' + ',' + newLine);
             }
             serializer.Remove(serializer.Length - 2, 2);

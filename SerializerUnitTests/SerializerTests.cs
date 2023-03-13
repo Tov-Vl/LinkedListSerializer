@@ -1,12 +1,13 @@
 using SerializerTests.Helpers;
 using SerializerTests.Implementations;
+using SerializerTests.Interfaces;
 using SerializerTests.Mappers;
+using SerializerTests.Model;
 using SerializerTests.Nodes;
 using SerializerTests.Options;
 using SerializerUnitTests.Comparers;
 using System.Diagnostics;
 using System.Text;
-using System.Text.Json;
 
 namespace SerializerUnitTests
 {
@@ -14,6 +15,7 @@ namespace SerializerUnitTests
     public class SerializerTests
     {
         private string _filePath;
+        private IListSerializerOptions _options;
 
         [SetUp]
         public void Setup()
@@ -22,11 +24,13 @@ namespace SerializerUnitTests
             var fileName = "serialized_linked_list.txt";
 
             _filePath = Path.Combine(fileDirectory, fileName);
+            _options = new ListSerializerOptions();
         }
 
         [Test, Order(1)]
         [TestCase(1)]
         [TestCase(10)]
+        [TestCase(10000)]
         public void Serialize_LinkedList_DoesNotThrowException(int nodesCount)
         {
             // Arrange
@@ -111,13 +115,16 @@ namespace SerializerUnitTests
             Assert.That(NodesReferencesAreNotEqual(linkedList, linkedListDeepCopy), Is.True);
         }
 
-        [TestCase(ListSerializerOptions.CustomSerializationThreshold / 100)]
-        [TestCase(ListSerializerOptions.CustomSerializationThreshold / 2)]
-        public async Task HelperSerialize_LinkedList_FasterThanJsonSerializer(int nodesCount)
+        [TestCase(1, 0.5)]
+        [TestCase(0.7, 0.5)]
+        [TestCase(0.01, 0.005)]
+        public async Task HelperSerialize_LinkedList_FasterThanJsonSerializer(double fractionOfTheThreshold, double fractionOfNodesCountThreshold)
         {
             // Arrange
             var stopWatch = new Stopwatch();
-            var head = GenerateLinkedList(nodesCount);
+            var nodesCount = (int)Math.Ceiling(_options.CustomSerializationNodesCountThreshold * fractionOfNodesCountThreshold);
+            var nodeDtoSize = _options.CustomSerializationTotalBytesThreshold * fractionOfTheThreshold / nodesCount;
+            var head = GenerateLinkedList(nodesCount, nodeDtoSize);
             var listNodeToNodeDtosMapper = new ListNodeToNodeDtosMapper();
             var nodeDtoDict = listNodeToNodeDtosMapper.Map(head);
 
@@ -142,13 +149,17 @@ namespace SerializerUnitTests
             Assert.That(customSerializationTime, Is.LessThan(systemTextJsonSerializationTime));
         }
 
-        [TestCase(ListSerializerOptions.CustomSerializationThreshold * 2)]
-        [TestCase(ListSerializerOptions.CustomSerializationThreshold * 4)]
-        public async Task HelperSerialize_LinkedList_SlowerThanJsonSerializer(int nodesCount)
+        [TestCase(1, 1.1)]
+        [TestCase(1.1, 1)]
+        [TestCase(1.1, 1.1)]
+        [TestCase(2, 2)]
+        public async Task HelperSerialize_LinkedList_SlowerThanJsonSerializer(double fractionOfTotalBytesThreshold, double fractionOfNodesCountThreshold)
         {
             // Arrange
             var stopWatch = new Stopwatch();
-            var head = GenerateLinkedList(nodesCount);
+            var nodesCount = (int) Math.Ceiling(_options.CustomSerializationNodesCountThreshold * fractionOfNodesCountThreshold);
+            var nodeDtoSize = _options.CustomSerializationTotalBytesThreshold * fractionOfTotalBytesThreshold / nodesCount;
+            var head = GenerateLinkedList(nodesCount, nodeDtoSize);
             var listNodeToNodeDtosMapper = new ListNodeToNodeDtosMapper();
             var nodeDtoDict = listNodeToNodeDtosMapper.Map(head);
 
@@ -173,7 +184,7 @@ namespace SerializerUnitTests
             Assert.That(customSerializationTime, Is.GreaterThan(systemTextJsonSerializationTime));
         }
 
-        private static ListNode GenerateLinkedList(int nodesCount)
+        private static ListNode GenerateLinkedList(int nodesCount, double? nodeDtoSize = null)
         {
             if (nodesCount == 0)
                 throw new ArgumentException("Nodes count should be greater than zero!", nameof(nodesCount));
@@ -181,9 +192,18 @@ namespace SerializerUnitTests
             var nodes = new ListNode[nodesCount];
             var randGen = new Random();
 
+            int dataLength;
+            if (nodeDtoSize == null)
+                dataLength = 10;
+            else
+                dataLength = GetDataLength((int)Math.Ceiling(nodeDtoSize.Value));
+
+            if (dataLength <= 0)
+                throw new ArgumentException($"The size of a single node is too small! Cant fit nodes with size of {nodeDtoSize:0.#} bytes into array with {nodesCount} elements", nameof(nodeDtoSize));
+
             for (var i = 0; i < nodesCount; i++)
             {
-                var data = GetRandomString(10);
+                var data = GetRandomString(dataLength);
                 nodes[i] = new ListNode() { Data = data };
             }
 
@@ -202,6 +222,11 @@ namespace SerializerUnitTests
             }
 
             return nodes.First();
+
+            int GetDataLength(int nodeDtoSize)
+            {
+                return (nodeDtoSize - NodeDto.SizeOfIndex() - NodeDto.SizeOfRandomIndex()) / sizeof(char);
+            }
 
             string? GetRandomString(int length)
             {
