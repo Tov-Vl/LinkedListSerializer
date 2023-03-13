@@ -4,8 +4,6 @@ using SerializerTests.Nodes;
 using System.Text;
 using System.Text.Json;
 using SerializerTests.Mappers;
-using SerializerTests.Helpers;
-using SerializerTests.Options;
 
 namespace SerializerTests.Implementations
 {
@@ -22,8 +20,6 @@ namespace SerializerTests.Implementations
 
         public IMapper<List<NodeDto>, ListNode> NodeDtosToListNodeMapper { get; set; } = new NodeDtosToListNodeMapper();
 
-        public IListSerializerOptions Options { get; set; } = new ListSerializerOptions();
-
         public Task<ListNode> DeepCopy(ListNode head)
         {
             var nodeDtoDict = ListNodeToNodeDtosMapper.Map(head);
@@ -37,21 +33,19 @@ namespace SerializerTests.Implementations
         {
             var nodeDtoDict = ListNodeToNodeDtosMapper.Map(head);
 
-            if (nodeDtoDict.Count > Options.CustomSerializationNodesCountThreshold)
+            var options = new JsonSerializerOptions
             {
-                await ListSerializerHelper.SerializeWithJsonSerializer(nodeDtoDict, stream, usePrettyFormatting: true);
-                return;
-            }
+                WriteIndented = true
+            };
 
-            var nodeDtosSize = GetNodeDtoCollectionSize(nodeDtoDict.Values);
-
-            if (nodeDtosSize > Options.CustomSerializationTotalBytesThreshold)
+            stream.WriteByte((byte)'[');
+            foreach (var node in nodeDtoDict.Values)
             {
-                await ListSerializerHelper.SerializeWithJsonSerializer(nodeDtoDict, stream, usePrettyFormatting: true);
-                return;
+                await JsonSerializer.SerializeAsync(stream, node, options);
+                stream.Write(",\n"u8);
             }
-
-            await ListSerializerHelper.Serialize(nodeDtoDict, stream, usePrettyFormatting: true);
+            stream.Position -= 2;
+            stream.WriteByte((byte)']');
         }
 
         public async Task<ListNode> Deserialize(Stream stream)
@@ -64,18 +58,6 @@ namespace SerializerTests.Implementations
             var head = NodeDtosToListNodeMapper.Map(nodeDtos);
 
             return head;
-        }
-
-        private static int GetNodeDtoCollectionSize(ICollection<NodeDto> nodeDtos)
-        {
-            var size = 0;
-
-            foreach (var nodeDto in nodeDtos)
-            {
-                size += nodeDto.NodeSize;
-            }
-
-            return size;
         }
 
         private static async Task<List<NodeDto>> DeserializeAsNodeDtos(Stream stream)

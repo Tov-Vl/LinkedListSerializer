@@ -1,12 +1,6 @@
-using SerializerTests.Helpers;
 using SerializerTests.Implementations;
-using SerializerTests.Interfaces;
-using SerializerTests.Mappers;
-using SerializerTests.Model;
 using SerializerTests.Nodes;
-using SerializerTests.Options;
 using SerializerUnitTests.Comparers;
-using System.Diagnostics;
 using System.Text;
 
 namespace SerializerUnitTests
@@ -15,7 +9,6 @@ namespace SerializerUnitTests
     public class SerializerTests
     {
         private string _filePath;
-        private IListSerializerOptions _options;
 
         [SetUp]
         public void Setup()
@@ -24,13 +17,19 @@ namespace SerializerUnitTests
             var fileName = "serialized_linked_list.txt";
 
             _filePath = Path.Combine(fileDirectory, fileName);
-            _options = new ListSerializerOptions();
+        }
+
+        [OneTimeTearDown]
+        public void TearDown()
+        {
+            File.Delete(_filePath);
         }
 
         [Test, Order(1)]
         [TestCase(1)]
         [TestCase(10)]
-        [TestCase(10000)]
+        [TestCase(10_000)]
+        [TestCase(600_000)]
         public void Serialize_LinkedList_DoesNotThrowException(int nodesCount)
         {
             // Arrange
@@ -115,76 +114,7 @@ namespace SerializerUnitTests
             Assert.That(NodesReferencesAreNotEqual(linkedList, linkedListDeepCopy), Is.True);
         }
 
-        [TestCase(1, 0.5)]
-        [TestCase(0.7, 0.5)]
-        [TestCase(0.01, 0.005)]
-        public async Task HelperSerialize_LinkedList_FasterThanJsonSerializer(double fractionOfTheThreshold, double fractionOfNodesCountThreshold)
-        {
-            // Arrange
-            var stopWatch = new Stopwatch();
-            var nodesCount = (int)Math.Ceiling(_options.CustomSerializationNodesCountThreshold * fractionOfNodesCountThreshold);
-            var nodeDtoSize = _options.CustomSerializationTotalBytesThreshold * fractionOfTheThreshold / nodesCount;
-            var head = GenerateLinkedList(nodesCount, nodeDtoSize);
-            var listNodeToNodeDtosMapper = new ListNodeToNodeDtosMapper();
-            var nodeDtoDict = listNodeToNodeDtosMapper.Map(head);
-
-            // Act
-            stopWatch.Start();
-            using (var stream = File.Create(_filePath))
-                await ListSerializerHelper.Serialize(nodeDtoDict, stream, usePrettyFormatting: true);
-            var customSerializationTime = stopWatch.Elapsed;
-
-            stopWatch.Restart();
-            using (var stream = File.Create(_filePath))
-                await ListSerializerHelper.SerializeWithJsonSerializer(nodeDtoDict, stream, usePrettyFormatting: true);
-            var systemTextJsonSerializationTime = stopWatch.Elapsed;
-
-            var message = $"""
-                            Custom serialization time: {customSerializationTime.TotalMilliseconds:0} ms
-                            System.Test.Json serialization time: {systemTextJsonSerializationTime.TotalMilliseconds:0} ms
-                            """;
-            Console.WriteLine(message);
-
-            // Assert
-            Assert.That(customSerializationTime, Is.LessThan(systemTextJsonSerializationTime));
-        }
-
-        [TestCase(1, 1.1)]
-        [TestCase(1.1, 1)]
-        [TestCase(1.1, 1.1)]
-        [TestCase(2, 2)]
-        public async Task HelperSerialize_LinkedList_SlowerThanJsonSerializer(double fractionOfTotalBytesThreshold, double fractionOfNodesCountThreshold)
-        {
-            // Arrange
-            var stopWatch = new Stopwatch();
-            var nodesCount = (int) Math.Ceiling(_options.CustomSerializationNodesCountThreshold * fractionOfNodesCountThreshold);
-            var nodeDtoSize = _options.CustomSerializationTotalBytesThreshold * fractionOfTotalBytesThreshold / nodesCount;
-            var head = GenerateLinkedList(nodesCount, nodeDtoSize);
-            var listNodeToNodeDtosMapper = new ListNodeToNodeDtosMapper();
-            var nodeDtoDict = listNodeToNodeDtosMapper.Map(head);
-
-            // Act
-            stopWatch.Start();
-            using (var stream = File.Create(_filePath))
-                await ListSerializerHelper.Serialize(nodeDtoDict, stream, usePrettyFormatting: true);
-            var customSerializationTime = stopWatch.Elapsed;
-
-            stopWatch.Restart();
-            using (var stream = File.Create(_filePath))
-                await ListSerializerHelper.SerializeWithJsonSerializer(nodeDtoDict, stream, usePrettyFormatting: true);
-            var systemTextJsonSerializationTime = stopWatch.Elapsed;
-
-            var message = $"""
-                            Custom serialization time: {customSerializationTime.TotalMilliseconds:0} ms
-                            System.Test.Json serialization time: {systemTextJsonSerializationTime.TotalMilliseconds:0} ms
-                            """;
-            Console.WriteLine(message);
-
-            // Assert
-            Assert.That(customSerializationTime, Is.GreaterThan(systemTextJsonSerializationTime));
-        }
-
-        private static ListNode GenerateLinkedList(int nodesCount, double? nodeDtoSize = null)
+        private static ListNode GenerateLinkedList(int nodesCount)
         {
             if (nodesCount == 0)
                 throw new ArgumentException("Nodes count should be greater than zero!", nameof(nodesCount));
@@ -193,16 +123,10 @@ namespace SerializerUnitTests
             var randGen = new Random();
 
             int dataLength;
-            if (nodeDtoSize == null)
-                dataLength = 10;
-            else
-                dataLength = GetDataLength((int)Math.Ceiling(nodeDtoSize.Value));
-
-            if (dataLength <= 0)
-                throw new ArgumentException($"The size of a single node is too small! Cant fit nodes with size of {nodeDtoSize:0.#} bytes into array with {nodesCount} elements", nameof(nodeDtoSize));
-
             for (var i = 0; i < nodesCount; i++)
             {
+                dataLength = randGen.Next(0, 100);
+
                 var data = GetRandomString(dataLength);
                 nodes[i] = new ListNode() { Data = data };
             }
@@ -222,11 +146,6 @@ namespace SerializerUnitTests
             }
 
             return nodes.First();
-
-            int GetDataLength(int nodeDtoSize)
-            {
-                return (nodeDtoSize - NodeDto.SizeOfIndex() - NodeDto.SizeOfRandomIndex()) / sizeof(char);
-            }
 
             string? GetRandomString(int length)
             {
