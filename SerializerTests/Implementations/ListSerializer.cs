@@ -1,8 +1,6 @@
 ﻿using SerializerTests.Interfaces;
 using SerializerTests.Model;
 using SerializerTests.Nodes;
-using System.Text;
-using System.Text.Json;
 using SerializerTests.Mappers;
 
 namespace SerializerTests.Implementations
@@ -16,41 +14,33 @@ namespace SerializerTests.Implementations
             //...
         }
 
-        public IMapper<ListNode, IDictionary<ListNode, NodeDto>> ListNodeToNodeDtosMapper { get; set; } = new ListNodeToNodeDtosMapper();
+        public IMapper<ListNode, IEnumerable<NodeDto>> ListNodeToNodeDtosMapper { get; set; } = new ListNodeToNodeDtosMapper();
 
-        public IMapper<List<NodeDto>, ListNode> NodeDtosToListNodeMapper { get; set; } = new NodeDtosToListNodeMapper();
+        public INodeDtosSerializer NodeDtosSerializer { get; set; } = new NodeDtosSerializer();
+
+        public IMapper<IList<NodeDto>, ListNode> NodeDtosToListNodeMapper { get; set; } = new NodeDtosToListNodeMapper();
+
+        public INodeDtosDeserializer NodeDtosDeserializer { get; set; } = new NodeDtosDeserializer();
 
         public Task<ListNode> DeepCopy(ListNode head)
         {
-            var nodeDtoDict = ListNodeToNodeDtosMapper.Map(head);
+            var nodeDtos = ListNodeToNodeDtosMapper.Map(head);
 
-            var headCopy = NodeDtosToListNodeMapper.Map(nodeDtoDict.Values.ToList());
+            var headCopy = NodeDtosToListNodeMapper.Map(nodeDtos.ToList());
 
             return Task.FromResult(headCopy);
         }
 
         public async Task Serialize(ListNode head, Stream stream)
         {
-            var nodeDtoDict = ListNodeToNodeDtosMapper.Map(head);
+            var nodeDtos = ListNodeToNodeDtosMapper.Map(head);
 
-            var options = new JsonSerializerOptions
-            {
-                WriteIndented = true
-            };
-
-            stream.WriteByte((byte)'[');
-            foreach (var node in nodeDtoDict.Values)
-            {
-                await JsonSerializer.SerializeAsync(stream, node, options);
-                stream.Write(",\n"u8);
-            }
-            stream.Position -= 2;
-            stream.WriteByte((byte)']');
+            await NodeDtosSerializer.Serialize(stream, nodeDtos);
         }
 
         public async Task<ListNode> Deserialize(Stream stream)
         {
-            var nodeDtos = await DeserializeAsNodeDtos(stream);
+            var nodeDtos = await NodeDtosDeserializer.Deserialize(stream);
 
             if (nodeDtos.Count == 0)
                 throw new ArgumentException("No data in the stream");
@@ -58,101 +48,6 @@ namespace SerializerTests.Implementations
             var head = NodeDtosToListNodeMapper.Map(nodeDtos);
 
             return head;
-        }
-
-        private static async Task<List<NodeDto>> DeserializeAsNodeDtos(Stream stream)
-        {
-            var res = new List<NodeDto>();
-
-            var node = new NodeDto();
-            var buffer = new byte[1];
-            var propertyIndex = 0;
-            var depth = 0;
-            var propertyValueBuilder = new StringBuilder();
-            var propertyNameBuilder = new StringBuilder();
-
-            while (await stream.ReadAsync(buffer.AsMemory(0, 1)) > 0)
-            {
-                if (depth > 1)
-                    throw new JsonException("Wrong nesting depth of the JSON file", (stream as FileStream)?.Name, null, null);
-
-                if (propertyIndex > NodeDto.PropertiesCount)
-                    throw new JsonException($"Wrong number of object properties (expected {NodeDto.PropertiesCount} properties", (stream as FileStream)?.Name, null, null);
-
-                var ch = (char)buffer[0];
-
-                if (ch == '{')
-                {
-                    if (depth == 0)
-                        node = new NodeDto();
-
-                    depth++;
-                }
-                else if (depth > 0 && (ch == ',' || ch == '}'))
-                {
-                    propertyIndex++;
-
-                    var propertyValue = propertyValueBuilder.ToString();
-                    var propertyName = propertyNameBuilder.ToString();
-                    switch (propertyName)
-                    {
-                        case NodeDto.IndexName:
-                            node.Index = int.Parse(propertyValue);
-                            break;
-                        case NodeDto.RandomIndexName:
-                            if (propertyValue == "null")
-                                node.RandomIndex = null;
-                            else
-                                node.RandomIndex = int.Parse(propertyValue);
-                            break;
-                        case NodeDto.DataName:
-                            if (propertyValue == "null")
-                                node.Data = null;
-                            else
-                                node.Data = propertyValue;
-                            break;
-                        default:
-                            throw new JsonException($"Wrong name of the property: \"{propertyName}\"", (stream as FileStream)?.Name, null, null);
-                    }
-
-                    propertyValueBuilder.Clear();
-                    propertyNameBuilder.Clear();
-
-                    if (ch == '}')
-                    {
-                        depth--;
-
-                        if (depth == 0)
-                        {
-                            res.Add(node);
-                            propertyIndex = 0;
-                        }
-                    }
-                }
-                else if (ch == '"')
-                {
-                    var builder = new StringBuilder();
-                    while (await stream.ReadAsync(buffer.AsMemory(0, 1)) > 0)
-                    {
-                        var nextChar = (char)buffer[0];
-                        if (nextChar == '"')
-                            break;
-
-                        builder.Append(nextChar);
-                    }
-
-                    if (propertyNameBuilder.Length == 0)
-                        propertyNameBuilder = builder;
-                    else
-                        propertyValueBuilder = builder;
-                }
-                else if (char.IsLetterOrDigit(ch))
-                {
-                    propertyValueBuilder.Append(ch);
-                }
-            }
-
-            return res;
         }
     }
 }

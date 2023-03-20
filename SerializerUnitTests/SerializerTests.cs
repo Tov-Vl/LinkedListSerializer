@@ -14,7 +14,7 @@ namespace SerializerUnitTests
         public void Setup()
         {
             var fileDirectory = Environment.CurrentDirectory;
-            var fileName = "serialized_linked_list.txt";
+            var fileName = "serialized_linked_list.json";
 
             _filePath = Path.Combine(fileDirectory, fileName);
         }

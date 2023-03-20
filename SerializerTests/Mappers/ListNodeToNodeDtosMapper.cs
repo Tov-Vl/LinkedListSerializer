@@ -4,9 +4,9 @@ using SerializerTests.Nodes;
 
 namespace SerializerTests.Mappers
 {
-    public class ListNodeToNodeDtosMapper : IMapper<ListNode, IDictionary<ListNode, NodeDto>>
+    public class ListNodeToNodeDtosMapper : IMapper<ListNode, IEnumerable<NodeDto>>
     {
-        public IDictionary<ListNode, NodeDto> Map(ListNode head)
+        public IEnumerable<NodeDto> Map(ListNode head)
         {
             var res = new Dictionary<ListNode, NodeDto>();
 
@@ -17,7 +17,7 @@ namespace SerializerTests.Mappers
             foreach (var (node, data) in res)
                 data.RandomIndex = node.Random == null ? null : res[node.Random].Index;
 
-            return res;
+            return res.Values;
         }
     }
 }

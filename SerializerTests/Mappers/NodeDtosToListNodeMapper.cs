@@ -4,9 +4,9 @@ using SerializerTests.Nodes;
 
 namespace SerializerTests.Mappers
 {
-    public class NodeDtosToListNodeMapper : IMapper<List<NodeDto>, ListNode>
+    public class NodeDtosToListNodeMapper : IMapper<IList<NodeDto>, ListNode>
     {
-        public ListNode Map(List<NodeDto> source)
+        public ListNode Map(IList<NodeDto> source)
         {
             var nodes = new ListNode[source.Count];
 
