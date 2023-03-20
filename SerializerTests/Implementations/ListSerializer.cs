@@ -20,7 +20,7 @@ namespace SerializerTests.Implementations
 
         public IMapper<IList<NodeDto>, ListNode> NodeDtosToListNodeMapper { get; set; } = new NodeDtosToListNodeMapper();
 
-        public INodeDtosDeserializer NodeDtosDeserializer { get; set; } = new NodeDtosDeserializer();
+        public INodeDtosDeserializer NodeDtosDeserializer { get; set; } = new Utf8JsonReaderNodeDtosDeserializer();
 
         public Task<ListNode> DeepCopy(ListNode head)
         {

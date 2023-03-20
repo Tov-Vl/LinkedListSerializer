@@ -1,6 +1,7 @@
 using SerializerTests.Implementations;
 using SerializerTests.Nodes;
 using SerializerUnitTests.Comparers;
+using System.Diagnostics;
 using System.Text;
 
 namespace SerializerUnitTests
@@ -45,10 +46,30 @@ namespace SerializerUnitTests
         }
 
         [Test, Order(2)]
-        public void Deserialize_StreamWithLinkedList_DoesNotThrowException()
+        public void Deserialize_StreamWithLinkedListAndCustomDeserializer_DoesNotThrowException()
         {
             // Arrange
-            var linkedListSerializer = new ListSerializer();
+            var linkedListSerializer = new ListSerializer()
+            {
+                NodeDtosDeserializer = new NodeDtosDeserializer()
+            };
+            using var stream = File.OpenRead(_filePath);
+
+            // Act
+            async Task deserializeAsync() => _ = await linkedListSerializer.Deserialize(stream);
+
+            // Assert
+            Assert.DoesNotThrowAsync(deserializeAsync);
+        }
+
+        [Test, Order(2)]
+        public void Deserialize_StreamWithLinkedListAndUtf8JsonReaderDeserializer_DoesNotThrowException()
+        {
+            // Arrange
+            var linkedListSerializer = new ListSerializer()
+            {
+                NodeDtosDeserializer = new Utf8JsonReaderNodeDtosDeserializer()
+            };
             using var stream = File.OpenRead(_filePath);
 
             // Act
@@ -81,6 +102,39 @@ namespace SerializerUnitTests
 
             // Assert
             Assert.That(linkedList, Is.EqualTo(linkedListDeserialized).Using(linkedListComparer));
+        }
+
+        [Test, Order(2)]
+        public async Task Deserialize_StreamWithLinkedList_Utf8JsonReaderDeserializerFasterThanCustomDeserializer()
+        {
+            // Arrange
+            var stopwatch = new Stopwatch();
+            TimeSpan customDeserializerDeserializationTime, utf8JsonReaderDeserializationTime;
+            var nodeDtosDeserializer = new NodeDtosDeserializer();
+            var utf8JsonReaderNodeDtosDeserializer = new Utf8JsonReaderNodeDtosDeserializer();
+            var linkedListSerializer = new ListSerializer();
+
+            // Act
+            linkedListSerializer.NodeDtosDeserializer = nodeDtosDeserializer;
+            stopwatch.Start();
+            using(var stream = File.OpenRead(_filePath))
+                 _ = await linkedListSerializer.Deserialize(stream);
+            customDeserializerDeserializationTime = stopwatch.Elapsed;
+
+            linkedListSerializer.NodeDtosDeserializer = utf8JsonReaderNodeDtosDeserializer;
+            stopwatch.Restart();
+            using (var stream = File.OpenRead(_filePath))
+                 _ = await linkedListSerializer.Deserialize(stream);
+            utf8JsonReaderDeserializationTime = stopwatch.Elapsed;
+
+            var message = $"""
+                            Custom {nameof(NodeDtosDeserializer)} deserialization time: {customDeserializerDeserializationTime.TotalMilliseconds:0} ms
+                            {nameof(Utf8JsonReaderNodeDtosDeserializer)} deserialization time: {utf8JsonReaderDeserializationTime.TotalMilliseconds:0} ms
+                            """;
+            Console.WriteLine(message);
+
+            // Assert
+            Assert.That(utf8JsonReaderDeserializationTime, Is.LessThan(customDeserializerDeserializationTime));
         }
 
         [TestCase(1)]
